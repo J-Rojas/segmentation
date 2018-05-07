@@ -1,38 +1,56 @@
 import numpy as np
-import cPickle
+import pickle
 import tensorflow as tf
 import cv2
 import os
+import sys
+import json
+from pydoc import locate
 
 from utilities import label_img_to_color
 
 from model import ENet_model
 
-project_dir = "/root/segmentation/"
-
-data_dir = project_dir + "data/"
+project_dir = os.path.dirname(os.path.realpath(__file__))
 
 model_id = "sequence_run"
 
-batch_size = 4
-img_height = 512
-img_width = 1024
+project_dir = os.path.dirname(os.path.realpath(__file__))
+config_file = sys.argv[1]
 
-model = ENet_model(model_id, img_height=img_height, img_width=img_width,
-            batch_size=batch_size)
+with open(config_file) as f:
+    config = json.load(f)
+
+data_dir = config['data_dir']
+save_dir = config['save_dir']
+
+# change this to not overwrite all log data when you train the model:
+model_name = config["model"]
+model_id = config["model_id"]
+batch_size = config['batch_size']
+img_height = 160
+img_width = 320
+subimg_x_offset = config['img_x_offset']
+subimg_y_offset = config['img_y_offset']
+subimg_height = config['img_height']
+subimg_width = config['img_width']
+
+model_class = locate(model_name)
+
+model = model_class(config)
 
 no_of_classes = model.no_of_classes
 
 # load the mean color channels of the train imgs:
-train_mean_channels = cPickle.load(open("data/mean_channels.pkl"))
+train_mean_channels = pickle.load(open("datasets/Cityscapes/data/mean_channels.pkl", "rb"))
 
 # load the sequence data:
-seq_frames_dir = "/root/data/cityscapes/leftImg8bit/demoVideo/stuttgart_02/"
+seq_frames_dir = data_dir
 seq_frame_paths = []
 frame_names = sorted(os.listdir(seq_frames_dir))
 for step, frame_name in enumerate(frame_names):
     if step % 100 == 0:
-        print step
+        print(step)
 
     frame_path = seq_frames_dir + frame_name
     seq_frame_paths.append(frame_path)
@@ -42,7 +60,9 @@ no_of_frames = len(seq_frame_paths)
 no_of_batches = int(no_of_frames/batch_size)
 
 # define where to place the resulting images:
-results_dir = model.project_dir + "results_on_seq/"
+results_dir = model.project_dir + "/results_on_seq/"
+if not(os.path.exists(results_dir)):
+    os.makedirs(results_dir)
 
 # create a saver for restoring variables/parameters:
 saver = tf.train.Saver(tf.trainable_variables(), write_version=tf.train.SaverDef.V2)
@@ -53,7 +73,7 @@ with tf.Session() as sess:
     sess.run(init)
 
     # restore the best trained model:
-    saver.restore(sess, project_dir + "training_logs/best_model/model_1_epoch_23.ckpt")
+    saver.restore(sess, config['model_weights'])
 
     batch_pointer = 0
     for step in range(no_of_batches):
@@ -65,6 +85,8 @@ with tf.Session() as sess:
             img_paths.append(img_path)
 
             # read the image:
+            print(img_path)
+
             img = cv2.imread(img_path, -1)
             img = cv2.resize(img, (img_width, img_height))
             img = img - train_mean_channels
@@ -78,7 +100,7 @@ with tf.Session() as sess:
         # run a forward pass and get the logits:
         logits = sess.run(model.logits, feed_dict=batch_feed_dict)
 
-        print "step: %d/%d" % (step+1, no_of_batches)
+        print("step: %d/%d" % (step+1, no_of_batches))
 
         # save all predicted label images overlayed on the input frames to results_dir:
         predictions = np.argmax(logits, axis=3)
@@ -97,14 +119,14 @@ with tf.Session() as sess:
             cv2.imwrite(pred_path, overlayed_img)
 
 # create a video of all the resulting overlayed images:
-fourcc = cv2.cv.CV_FOURCC("M", "J", "P", "G")
+fourcc = cv2.CV_FOURCC("M", "J", "P", "G")
 out = cv2.VideoWriter(results_dir + "cityscapes_stuttgart_02_pred.avi", fourcc,
             20.0, (img_width, img_height))
 
 frame_names = sorted(os.listdir(results_dir))
 for step, frame_name in enumerate(frame_names):
     if step % 100 == 0:
-        print step
+        print(step)
 
     if ".png" in frame_name:
         frame_path = results_dir + frame_name

@@ -41,21 +41,33 @@ def max_unpool(inputs, pooling_indices, output_shape=None, k_size=[1, 2, 2, 1]):
 
     # output_shape: what shape the returned tensor should have
 
+    #print(pooling_indices)
+
     pooling_indices = tf.cast(pooling_indices, tf.int32)
     input_shape = tf.shape(inputs, out_type=tf.int32)
 
     one_like_pooling_indices = tf.ones_like(pooling_indices, dtype=tf.int32)
     batch_shape = tf.concat([[input_shape[0]], [1], [1], [1]], 0)
     batch_range = tf.reshape(tf.range(input_shape[0], dtype=tf.int32), shape=batch_shape)
+
+    channel_size = output_shape[1] * output_shape[2] * output_shape[3]
+    row_size = output_shape[2] * output_shape[3]
+    col_size = output_shape[3]
+
     b = one_like_pooling_indices*batch_range
-    y = pooling_indices//(output_shape[2]*output_shape[3])
-    x = (pooling_indices//output_shape[3]) % output_shape[2]
+    y = (pooling_indices % channel_size) // row_size
+    x = ((pooling_indices % channel_size) % row_size) // col_size
     feature_range = tf.range(output_shape[3], dtype=tf.int32)
     f = one_like_pooling_indices*feature_range
 
     inputs_size = tf.size(inputs)
     indices = tf.transpose(tf.reshape(tf.stack([b, y, x, f]), [4, inputs_size]))
     values = tf.reshape(inputs, [inputs_size])
+
+    #indices = tf.Print(indices, ["Indices", indices], summarize=100000)
+    #indices = tf.Print(indices, ["Input_shape", input_shape], summarize=100000)
+    
+    #print("Input_shape = {}, Indices = {}, values = {}, output_shape = {}".format(input_shape, indices, values, output_shape))
 
     ret = tf.scatter_nd(indices, values, output_shape)
 

@@ -1,13 +1,14 @@
 import cv2
-import cPickle
+import pickle
 import os
 import numpy as np
 import tensorflow as tf
 from collections import namedtuple
 import random
+import sys
 
-project_dir = "/root/segmentation/"
-data_dir = "/root/data/"
+project_dir = os.path.dirname(os.path.realpath(__file__))
+data_dir = sys.argv[1]
 
 # (NOTE! this is taken from the official Cityscapes scripts:)
 Label = namedtuple( 'Label' , [
@@ -94,7 +95,7 @@ new_img_height = 512 # (the height all images fed to the model will be resized t
 new_img_width = 1024 # (the width all images fed to the model will be resized to)
 no_of_classes = 20 # (number of object classes (road, sidewalk, car etc.))
 
-cityscapes_dir = data_dir + "cityscapes/"
+cityscapes_dir = data_dir
 
 train_imgs_dir = cityscapes_dir + "leftImg8bit/train/"
 train_gt_dir = cityscapes_dir + "gtFine/train/"
@@ -122,45 +123,49 @@ for dir_step, dir in enumerate(train_dirs):
                         step, len(file_names)-1))
 
         img_id = file_name.split("_left")[0]
-
-        # read the image:
-        img_path = img_dir + file_name
-        img = cv2.imread(img_path, -1)
-
-        # resize the image without interpolation (want the image to still match
-        # the corresponding label image which we reisize below) and save to
-        # project_dir/data:
-        img_small = cv2.resize(img, (new_img_width, new_img_height),
-                    interpolation=cv2.INTER_NEAREST)
-        img_small_path = project_dir + "data/" + img_id + ".png"
-        cv2.imwrite(img_small_path, img_small)
-        train_img_paths.append(img_small_path)
-
-        # read and resize the corresponding label image without interpolation
-        # (want the resulting image to still only contain pixel values
-        # corresponding to an object class):
+        img_small_path = project_dir + "/data/" + img_id + ".png"
         gt_img_path = train_gt_dir + dir + img_id + "_gtFine_labelIds.png"
-        gt_img = cv2.imread(gt_img_path, -1)
-        gt_img_small = cv2.resize(gt_img, (new_img_width, new_img_height),
+        trainId_label_path = project_dir + "/data/" + img_id + "_trainId_label.png"
+
+        if not(os.path.exists(img_small_path) and os.path.exists(gt_img_path) and os.path.exists(trainId_label_path)):        
+            # read the image:
+            img_path = img_dir + file_name
+            img = cv2.imread(img_path, -1)
+
+            # resize the image without interpolation (want the image to still match
+            # the corresponding label image which we reisize below) and save to
+            # project_dir/data:
+            img_small = cv2.resize(img, (new_img_width, new_img_height),
                         interpolation=cv2.INTER_NEAREST)
+            cv2.imwrite(img_small_path, img_small)
+        
+            # read and resize the corresponding label image without interpolation
+            # (want the resulting image to still only contain pixel values
+            # corresponding to an object class):
+            
+            gt_img = cv2.imread(gt_img_path, -1)
+            gt_img_small = cv2.resize(gt_img, (new_img_width, new_img_height),
+                            interpolation=cv2.INTER_NEAREST)
 
-        # convert the label image from id to trainId pixel values:
-        id_label = gt_img_small
-        trainId_label = id_to_trainId_map_func(id_label)
+            # convert the label image from id to trainId pixel values:
+            id_label = gt_img_small
+            trainId_label = id_to_trainId_map_func(id_label)
 
-        # save the label image to project_dir/data:
-        trainId_label_path = project_dir + "data/" + img_id + "_trainId_label.png"
-        cv2.imwrite(trainId_label_path, trainId_label)
+            # save the label image to project_dir/data:
+            
+            cv2.imwrite(trainId_label_path, trainId_label)
+            
+        train_img_paths.append(img_small_path)
         train_trainId_label_paths.append(trainId_label_path)
 
 
 # compute the mean color channels of the train imgs:
-print "computing mean color channels of the train imgs"
+print("computing mean color channels of the train imgs")
 no_of_train_imgs = len(train_img_paths)
 mean_channels = np.zeros((3, ))
 for step, img_path in enumerate(train_img_paths):
     if step % 100 == 0:
-        print step
+        print(step)
 
     img = cv2.imread(img_path, -1)
 
@@ -172,11 +177,11 @@ for step, img_path in enumerate(train_img_paths):
 mean_channels = mean_channels/float(no_of_train_imgs)
 
 # # save to disk:
-cPickle.dump(mean_channels, open(project_dir + "data/mean_channels.pkl", "w"))
+pickle.dump(mean_channels, open(project_dir + "/data/mean_channels.pkl", "wb"))
 
 
 # compute the class weights:
-print "computing class weights"
+print("computing class weights")
 trainId_to_count = {}
 for trainId in range(no_of_classes):
     trainId_to_count[trainId] = 0
@@ -185,7 +190,7 @@ for trainId in range(no_of_classes):
 # # object class:
 for step, trainId_label_path in enumerate(train_trainId_label_paths):
     if step % 100 == 0:
-        print step
+        print(step)
 
     # read the label image:
     trainId_label = cv2.imread(trainId_label_path, -1)
@@ -207,7 +212,7 @@ for trainId, count in trainId_to_count.items():
     class_weights.append(trainId_weight)
 
 # # save to disk:
-cPickle.dump(class_weights, open(project_dir + "data/class_weights.pkl", "w"))
+pickle.dump(class_weights, open(project_dir + "/data/class_weights.pkl", "wb"))
 
 
 # get the path to all validation images and their corresponding label image:
@@ -219,8 +224,8 @@ for dir_step, dir in enumerate(val_dirs):
     file_names = os.listdir(img_dir)
     for step, file_name in enumerate(file_names):
         if step % 10 == 0:
-            print "val dir %d/%d, step %d/%d" % (dir_step, len(val_dirs)-1,
-                        step, len(file_names)-1)
+            print("val dir %d/%d, step %d/%d" % (dir_step, len(val_dirs)-1,
+                        step, len(file_names)-1))
 
         img_id = file_name.split("_left")[0]
 
@@ -233,7 +238,7 @@ for dir_step, dir in enumerate(val_dirs):
         # project_dir/data:
         img_small = cv2.resize(img, (new_img_width, new_img_height),
                     interpolation=cv2.INTER_NEAREST)
-        img_small_path = project_dir + "data/" + img_id + ".png"
+        img_small_path = project_dir + "/data/" + img_id + ".png"
         cv2.imwrite(img_small_path, img_small)
         val_img_paths.append(img_small_path)
 
@@ -250,28 +255,28 @@ for dir_step, dir in enumerate(val_dirs):
         trainId_label = id_to_trainId_map_func(id_label)
 
         # save the label image to project_dir/data:
-        trainId_label_path = project_dir + "data/" + img_id + "_trainId_label.png"
+        trainId_label_path = project_dir + "/data/" + img_id + "_trainId_label.png"
         cv2.imwrite(trainId_label_path, trainId_label)
         val_trainId_label_paths.append(trainId_label_path)
 
 # # save the validation data to disk:
-cPickle.dump(val_trainId_label_paths,
-            open(project_dir + "data/val_trainId_label_paths.pkl", "w"))
-cPickle.dump(val_img_paths,
-            open(project_dir + "data/val_img_paths.pkl", "w"))
+pickle.dump(val_trainId_label_paths,
+            open(project_dir + "/data/val_trainId_label_paths.pkl", "wb"))
+pickle.dump(val_img_paths,
+            open(project_dir + "/data/val_img_paths.pkl", "wb"))
 # val_trainId_label_paths = cPickle.load(open(project_dir + "data/val_trainId_label_paths.pkl"))
 # val_img_paths = cPickle.load(open(project_dir + "data/val_img_paths.pkl"))
 
 
 # augment the train data by flipping all train imgs:
 no_of_train_imgs = len(train_img_paths)
-print "number of train imgs before augmentation: %d " % no_of_train_imgs
+print("number of train imgs before augmentation: %d " % no_of_train_imgs)
 
 augmented_train_img_paths = []
 augmented_train_trainId_label_paths = []
 for step, (img_path, label_path) in enumerate(zip(train_img_paths, train_trainId_label_paths)):
     if step % 100 == 0:
-        print step
+        print(step)
 
     augmented_train_img_paths.append(img_path)
     augmented_train_trainId_label_paths.append(label_path)
@@ -295,7 +300,7 @@ for step, (img_path, label_path) in enumerate(zip(train_img_paths, train_trainId
     augmented_train_trainId_label_paths.append(label_img_flipped_path)
 
 # # randomly shuffle the augmented train data:
-augmented_train_data = zip(augmented_train_img_paths, augmented_train_trainId_label_paths)
+augmented_train_data = list(zip(augmented_train_img_paths, augmented_train_trainId_label_paths))
 random.shuffle(augmented_train_data)
 random.shuffle(augmented_train_data)
 random.shuffle(augmented_train_data)
@@ -304,12 +309,12 @@ random.shuffle(augmented_train_data)
 # # save the augmented train data to disk:
 train_data = augmented_train_data
 train_img_paths, train_trainId_label_paths = zip(*train_data)
-cPickle.dump(train_img_paths,
-            open(project_dir + "data/train_img_paths.pkl", "w"))
-cPickle.dump(train_trainId_label_paths,
-            open(project_dir + "data/train_trainId_label_paths.pkl", "w"))
+pickle.dump(train_img_paths,
+            open(project_dir + "/data/train_img_paths.pkl", "wb"))
+pickle.dump(train_trainId_label_paths,
+            open(project_dir + "/data/train_trainId_label_paths.pkl", "wb"))
 # train_img_paths = cPickle.load(open(project_dir + "data/train_img_paths.pkl"))
 # train_trainId_label_paths = cPickle.load(open(project_dir + "data/train_trainId_label_paths.pkl"))
 
 no_of_train_imgs = len(train_img_paths)
-print "number of train imgs after augmentation: %d " % no_of_train_imgs
+print("number of train imgs after augmentation: %d " % no_of_train_imgs)

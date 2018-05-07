@@ -1,5 +1,5 @@
 import numpy as np
-import cPickle
+import pickle
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -11,16 +11,15 @@ from utilities import label_img_to_color
 
 from model import ENet_model
 
-project_dir = "/root/segmentation/"
-
-data_dir = project_dir + "data/"
+project_dir = os.path.dirname(os.path.realpath(__file__))
+data_dir = sys.argv[1]
 
 # change this to not overwrite all log data when you train the model:
 model_id = "1"
 
 batch_size = 4
-img_height = 512
-img_width = 1024
+img_height = 160 
+img_width = 320
 
 model = ENet_model(model_id, img_height=img_height, img_width=img_width,
             batch_size=batch_size)
@@ -28,11 +27,11 @@ model = ENet_model(model_id, img_height=img_height, img_width=img_width,
 no_of_classes = model.no_of_classes
 
 # load the mean color channels of the train imgs:
-train_mean_channels = cPickle.load(open("data/mean_channels.pkl"))
+train_mean_channels = pickle.load(open("data/mean_channels.pkl", "rb"))
 
 # load the training data from disk:
-train_img_paths = cPickle.load(open(data_dir + "train_img_paths.pkl"))
-train_trainId_label_paths = cPickle.load(open(data_dir + "train_trainId_label_paths.pkl"))
+train_img_paths = pickle.load(open(data_dir + "train_img_paths.pkl", "rb"))
+train_trainId_label_paths = pickle.load(open(data_dir + "train_trainId_label_paths.pkl", "rb"))
 train_data = zip(train_img_paths, train_trainId_label_paths)
 
 # compute the number of batches needed to iterate through the training data:
@@ -40,8 +39,8 @@ no_of_train_imgs = len(train_img_paths)
 no_of_batches = int(no_of_train_imgs/batch_size)
 
 # load the validation data from disk:
-val_img_paths = cPickle.load(open(data_dir + "val_img_paths.pkl"))
-val_trainId_label_paths = cPickle.load(open(data_dir + "val_trainId_label_paths.pkl"))
+val_img_paths = pickle.load(open(data_dir + "val_img_paths.pkl", "rb"))
+val_trainId_label_paths = pickle.load(open(data_dir + "val_trainId_label_paths.pkl", "rb"))
 val_data = zip(val_img_paths, val_trainId_label_paths)
 
 # compute the number of batches needed to iterate through the val data:
@@ -179,8 +178,8 @@ with tf.Session() as sess:
         # save the train epoch loss:
         train_loss_per_epoch.append(train_epoch_loss)
         # save the train epoch losses to disk:
-        cPickle.dump(train_loss_per_epoch, open("%strain_loss_per_epoch.pkl"
-                    % model.model_dir, "w"))
+        pickle.dump(train_loss_per_epoch, open("%strain_loss_per_epoch.pkl"
+                    % model.model_dir, "wb"))
         print "training loss: %g" % train_epoch_loss
 
         # run the model on the validation data:
@@ -189,8 +188,8 @@ with tf.Session() as sess:
         # save the val epoch loss:
         val_loss_per_epoch.append(val_loss)
         # save the val epoch losses to disk:
-        cPickle.dump(val_loss_per_epoch, open("%sval_loss_per_epoch.pkl"\
-                    % model.model_dir, "w"))
+        pickle.dump(val_loss_per_epoch, open("%sval_loss_per_epoch.pkl"\
+                    % model.model_dir, "wb"))
         print "validation loss: %g" % val_loss
 
         if val_loss < max(best_epoch_losses): # (if top 5 performance on val:)
